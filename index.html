@@ -182,7 +182,14 @@
   const AUDIO_SRC = "nights_like_this.mp4";
 
   // ---------- Audio setup ----------
-  const audio = new Audio(AUDIO_SRC);
+  // Use a hidden <video> element instead of Audio() so MP4 files play
+  // reliably across all browsers (audio elements reject MP4 containers).
+  const audio = document.createElement('video');
+  audio.src = AUDIO_SRC;
+  audio.preload = 'auto';
+  audio.muted = false;
+  audio.style.display = 'none';
+  document.body.appendChild(audio);
   let audioCtx, analyser, freqData;
   const openingEl = document.getElementById('opening');
   const closingEl = document.getElementById('closing');
