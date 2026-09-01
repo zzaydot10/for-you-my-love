@@ -188,6 +188,7 @@
   audio.src = AUDIO_SRC;
   audio.preload = 'auto';
   audio.muted = false;
+  audio.playsInline = true;
   audio.style.display = 'none';
   document.body.appendChild(audio);
   let audioCtx, analyser, freqData;
@@ -195,12 +196,9 @@
   const closingEl = document.getElementById('closing');
   if (CLOSING_LINE) closingEl.textContent = CLOSING_LINE;
 
-  // The whole animation is driven by a clock. Normally that's the audio's
-  // playback position, but the music file may be absent (it isn't published
-  // with the site). In that case fall back to a wall-clock timer started on
-  // the opening tap, so the message still writes itself out.
   let audioOk = false;
   let fallbackStart = null;
+  let pendingPlay = false;    // true while waiting for the video to buffer
 
   function showTime() {
     if (audioOk && !audio.paused) return audio.currentTime;
@@ -226,32 +224,46 @@
     }
   }
 
-  async function startPlayback() {
-    // Always start the fallback clock so the animation runs regardless
-    if (fallbackStart === null) fallbackStart = performance.now();
-    if (audioCtx === undefined) initAudio();
+  async function tryPlay() {
     if (audioCtx && audioCtx.state === 'suspended') {
       try { await audioCtx.resume(); } catch (e) { /* ignore */ }
     }
     try {
       await audio.play();
       audioOk = true;
+      pendingPlay = false;
+      return true;
     } catch (err) {
-      // No audio (missing file, autoplay refused) - the visuals still run
-      console.warn('Audio unavailable, running without sound:', err && err.message);
-      audioOk = false;
+      console.warn('Play failed:', err && err.message);
+      return false;
     }
   }
 
-  // Opening screen is the only control: one tap starts everything
-  // (and satisfies the browser's autoplay gesture requirement).
+  async function startPlayback() {
+    if (fallbackStart === null) fallbackStart = performance.now();
+    if (audioCtx === undefined) initAudio();
+
+    // If the video hasn't buffered enough yet, wait for it
+    if (audio.readyState < 3) {   // HAVE_FUTURE_DATA = 3
+      pendingPlay = true;
+      audio.addEventListener('canplay', function onCanPlay() {
+        audio.removeEventListener('canplay', onCanPlay);
+        if (pendingPlay) tryPlay();
+      }, { once: true });
+      // Also try after a short timeout as a safety net
+      setTimeout(() => { if (pendingPlay) tryPlay(); }, 2000);
+    } else {
+      await tryPlay();
+    }
+  }
+
+  // Opening screen: one tap starts everything
   openingEl.addEventListener('click', () => {
     openingEl.classList.add('gone');
     setTimeout(() => { openingEl.style.display = 'none'; }, 1200);
     startPlayback();
   });
 
-  // Missing/unplayable audio is not fatal - just run the visuals silently.
   audio.addEventListener('error', function () {
     console.warn('Audio file could not be loaded; continuing without sound.');
     audioOk = false;
