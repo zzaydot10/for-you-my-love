@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nights Like This â€” The Kid LAROI</title>
+<title>Nights Like This — The Kid LAROI</title>
 <style>
   :root {
     --pink: #ff4d8d;
@@ -189,6 +189,7 @@
 
   let audioOk = false;
   let fallbackStart = null;
+  let analyser = null, freqData = null; // kept so getPulse() doesn't throw
 
   function showTime() {
     if (audioOk && !audio.paused) return audio.currentTime;
