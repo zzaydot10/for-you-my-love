@@ -182,16 +182,7 @@
   const AUDIO_SRC = "nights_like_this.mp3";
 
   // ---------- Audio setup ----------
-  // Use a hidden <video> element so MP4 files play in all browsers.
-  const audio = document.createElement('video');
-  audio.src = AUDIO_SRC;
-  audio.preload = 'auto';
-  audio.muted = false;
-  audio.playsInline = true;
-  // DON'T use display:none â€” some browsers block audio from hidden media.
-  // Instead, move it off-screen so it's invisible but still plays.
-  audio.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
-  document.body.appendChild(audio);
+  const audio = new Audio(AUDIO_SRC);
   const openingEl = document.getElementById('opening');
   const closingEl = document.getElementById('closing');
   if (CLOSING_LINE) closingEl.textContent = CLOSING_LINE;
