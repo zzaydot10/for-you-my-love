@@ -1,0 +1,901 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nights Like This â€” The Kid LAROI</title>
+<style>
+  :root {
+    --pink: #ff4d8d;
+    --hot: #ff2d6f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 20%, #1a0a2e, #000000 70%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #fff;
+    user-select: none;
+  }
+  canvas { position: fixed; inset: 0; z-index: 0; }
+
+  #stage {
+    position: fixed;
+    top: 4vh;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    text-align: center;
+    pointer-events: none;
+  }
+  #title {
+    font-size: 1rem;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #ff9ec4;
+    opacity: 0.8;
+  }
+
+  /* The whole lyric text fills a heart, letter by letter */
+  #lyrics {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .letter {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: #000000;
+    opacity: 0;
+    transition: opacity 0.18s ease, color 0.3s ease, text-shadow 0.3s ease;
+  }
+  /* Not typed yet: completely invisible, so it reads as a typing effect */
+  .letter.ghost {
+    opacity: 0;
+  }
+  .letter.shown {
+    opacity: 1;
+    color: #000000;
+  }
+  .letter.latest {
+    color: #000000;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
+  }
+  .letter.complete {
+    color: #000000;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
+  }
+
+  /* Blinking caret that sits just after the last typed character */
+  #caret {
+    position: fixed;
+    z-index: 3;
+    pointer-events: none;
+    background: #000;
+    opacity: 0;
+    border-radius: 1px;
+  }
+  #caret.on {
+    animation: caretBlink 1s step-end infinite;
+  }
+  @keyframes caretBlink {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 0; }
+  }
+
+  /* ---------- Opening screen ---------- */
+  #opening {
+    position: fixed;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    cursor: pointer;
+    background: radial-gradient(circle at 50% 45%, rgba(40, 12, 46, 0.55), rgba(0, 0, 0, 0.86) 70%);
+    transition: opacity 1.1s ease;
+  }
+  #opening.gone {
+    opacity: 0;
+    pointer-events: none;
+  }
+  #openHeart {
+    width: clamp(90px, 16vmin, 150px);
+    height: clamp(90px, 16vmin, 150px);
+    animation: openPulse 2.4s ease-in-out infinite;
+  }
+  #openText {
+    color: #ffd7e8;
+    font-size: clamp(0.95rem, 2.4vmin, 1.25rem);
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    opacity: 0.85;
+    animation: openFade 2.4s ease-in-out infinite;
+  }
+  @keyframes openPulse {
+    0%, 100% { transform: scale(1);    filter: drop-shadow(0 0 14px rgba(255, 77, 141, 0.55)); }
+    50%      { transform: scale(1.11); filter: drop-shadow(0 0 30px rgba(255, 77, 141, 0.95)); }
+  }
+  @keyframes openFade {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+  }
+
+  /* ---------- Closing line, fades in once the message finishes ---------- */
+  #closing {
+    position: fixed;
+    left: 50%;
+    bottom: 8vh;
+    transform: translate(-50%, 14px);
+    z-index: 4;
+    pointer-events: none;
+    text-align: center;
+    color: #ffe3ef;
+    font-size: clamp(1.05rem, 2.6vmin, 1.7rem);
+    letter-spacing: 3px;
+    text-shadow: 0 0 22px rgba(255, 77, 141, 0.85);
+    opacity: 0;
+    transition: opacity 1.8s ease, transform 1.8s ease;
+  }
+  #closing.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="lyrics"></div>
+<div id="caret"></div>
+<div id="closing"></div>
+
+<div id="opening">
+  <svg id="openHeart" viewBox="0 0 32 30" aria-hidden="true">
+    <path d="M16 28 C 16 28, 1 18.5, 1 9.5 A 7.5 7.5 0 0 1 16 7 A 7.5 7.5 0 0 1 31 9.5 C 31 18.5, 16 28, 16 28 Z" fill="#ff4d8d"/>
+  </svg>
+  <div id="openText">tap to start</div>
+</div>
+
+<script>
+  // ============================================================
+  //  TEXT
+  //  HEART_TEXT - fitted inside the big pink heart
+  //  (the moon shows two cats head to head instead of text)
+  // ============================================================
+  const HEART_TEXT = "I really hope you know just how much I care about you, because sometimes I feel like words will never be enough to explain it. You mean so much to me, and I'm genuinely so grateful that you're in my life. Thank you for being patient with me, for understanding me, and for staying by my side even when I'm not always the easiest person to deal with. I notice those things, even if I don't always say it, and they mean more to me than you probably realize. You're seriously the prettiest girl in the entire world to me, and it's not just because of how beautiful you are, but because of the person you are and the way you make me feel. I feel incredibly lucky to have you, and I honestly don't ever want to take that for granted. Out of everyone in this world, somehow I got lucky enough to have you, and that's something I'll always be thankful for. I care about you more than I can explain, and no matter what, I hope you never forget how loved, appreciated, and special you are to me.";
+
+  const SONG_START = 14.0;   // the drop - text starts appearing here
+  const SONG_END   = 78.0;   // whole message written by here
+
+  // Fades in under the heart once the message finishes writing.
+  // Put her name here, or leave "" to skip it.
+  const CLOSING_LINE = "";
+
+  const AUDIO_SRC = "nights_like_this.mp3";
+
+  // ---------- Audio setup ----------
+  const audio = new Audio(AUDIO_SRC);
+  let audioCtx, analyser, freqData;
+  const openingEl = document.getElementById('opening');
+  const closingEl = document.getElementById('closing');
+  if (CLOSING_LINE) closingEl.textContent = CLOSING_LINE;
+
+  // The whole animation is driven by a clock. Normally that's the audio's
+  // playback position, but the music file may be absent (it isn't published
+  // with the site). In that case fall back to a wall-clock timer started on
+  // the opening tap, so the message still writes itself out.
+  let audioOk = false;
+  let fallbackStart = null;
+
+  function showTime() {
+    if (audioOk && !audio.paused) return audio.currentTime;
+    if (audioOk && audio.currentTime > 0) return audio.currentTime;
+    if (fallbackStart === null) return 0;
+    return (performance.now() - fallbackStart) / 1000;
+  }
+
+  function initAudio() {
+    if (audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = audioCtx.createMediaElementSource(audio);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+    } catch (e) {
+      console.warn("Audio analysis unavailable:", e);
+      audioCtx = null;
+      analyser = null;
+    }
+  }
+
+  async function startPlayback() {
+    // Always start the fallback clock so the animation runs regardless
+    if (fallbackStart === null) fallbackStart = performance.now();
+    if (audioCtx === undefined) initAudio();
+    if (audioCtx && audioCtx.state === 'suspended') {
+      try { await audioCtx.resume(); } catch (e) { /* ignore */ }
+    }
+    try {
+      await audio.play();
+      audioOk = true;
+    } catch (err) {
+      // No audio (missing file, autoplay refused) - the visuals still run
+      console.warn('Audio unavailable, running without sound:', err && err.message);
+      audioOk = false;
+    }
+  }
+
+  // Opening screen is the only control: one tap starts everything
+  // (and satisfies the browser's autoplay gesture requirement).
+  openingEl.addEventListener('click', () => {
+    openingEl.classList.add('gone');
+    setTimeout(() => { openingEl.style.display = 'none'; }, 1200);
+    startPlayback();
+  });
+
+  // Missing/unplayable audio is not fatal - just run the visuals silently.
+  audio.addEventListener('error', function () {
+    console.warn('Audio file could not be loaded; continuing without sound.');
+    audioOk = false;
+  });
+
+  // ---------- Canvas + resize ----------
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  // Initialize immediately: stars/hearts are created below using w/h, and if
+  // these are still undefined at that point every coordinate becomes NaN
+  // and nothing draws.
+  let w = canvas.width = window.innerWidth;
+  let h = canvas.height = window.innerHeight;
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+    layoutLetters();
+    // Reflow stars into the new viewport and reposition the moon.
+    if (typeof stars !== 'undefined') {
+      for (const s of stars) {
+        if (s.x > w) s.x = Math.random() * w;
+        if (s.y > h) s.y = Math.random() * h;
+      }
+    }
+    if (typeof placeMoon === 'function') placeMoon();
+  }
+  window.addEventListener('resize', resize);
+
+  // ---------- Heart layout: the message shaped into a heart ----------
+  // (fullText / chars / charCount are built after packing, further below)
+
+  // Heart curve (classic heart). t in 0..2PI, units x -16..16, y -17..+13
+  const HCX = 0, HCY = -6;
+  function heartPt(t, F) {
+    const x = 16 * Math.pow(Math.sin(t), 3);
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    return [HCX + (x - HCX) * F, HCY + (y - HCY) * F];
+  }
+  // Heart boundary samples at inset scale (so text stays inside outline)
+  const INSET = 0.86;
+  const HB = [];
+  for (let i = 0; i < 3000; i++) HB.push(heartPt((i / 3000) * Math.PI * 2, INSET));
+  let hbYmin = Infinity, hbYmax = -Infinity;
+  for (const p of HB) { if (p[1] < hbYmin) hbYmin = p[1]; if (p[1] > hbYmax) hbYmax = p[1]; }
+
+  // Interior horizontal spans at height yc.
+  // Near the top a heart has TWO separate lobes with a notch between them,
+  // so this returns one interval per lobe instead of one span across the gap.
+  function spansAt(yc) {
+    const xs = [];
+    for (let i = 0, j = HB.length - 1; i < HB.length; j = i++) {
+      const yi = HB[i][1], yj = HB[j][1];
+      if ((yi > yc) !== (yj > yc)) {
+        const xi = HB[i][0], xj = HB[j][0];
+        xs.push(xi + (xj - xi) * (yc - yi) / (yj - yi));
+      }
+    }
+    xs.sort((a, b) => a - b);
+    const out = [];
+    for (let k = 0; k + 1 < xs.length; k += 2) out.push([xs[k], xs[k + 1]]);
+    return out;
+  }
+
+  // Pack the message into the heart, cycling it so every row fills.
+  // (Filling is driven by geometry, not by running out of words.)
+  // Word-wrap the message into the heart's interior spans.
+  // Stops when the words run out (the message appears exactly once).
+  function packHeart(rowU) {
+    const cw = 0.60 * rowU;
+    const src = HEART_TEXT.split(/\s+/);
+    let si = 0;
+    const segs = [];
+    for (let yc = hbYmax - rowU / 2; yc > hbYmin && si < src.length; yc -= rowU) {
+      for (const [x0, x1] of spansAt(yc)) {
+        if (si >= src.length) break;
+        const cap = Math.floor((x1 - x0) / cw);
+        if (cap < 1) continue;
+        let used = 0;
+        const placed = [];
+        while (si < src.length) {
+          const wd = src[si];
+          const need = used === 0 ? wd.length : used + 1 + wd.length;
+          if (need <= cap) { placed.push(wd); used = need; si++; }
+          else break;
+        }
+        if (placed.length) segs.push({ x0, x1, yc, words: placed });
+      }
+    }
+    return { segs, cw, placed: si, total: src.length };
+  }
+
+  // Find the largest row pitch that still fits the whole message,
+  // so the text is as large as possible while filling the heart.
+  let ROW_U;
+  {
+    let lo = 0.30, hi = 2.20;
+    for (let i = 0; i < 48; i++) {
+      const mid = (lo + hi) / 2;
+      const r = packHeart(mid);
+      if (r.placed >= r.total) lo = mid; else hi = mid;
+    }
+    ROW_U = lo;
+  }
+  const packed = packHeart(ROW_U);
+
+  // Flattened text and one position per character, in reading order.
+  const fullText = packed.segs
+    .map((s, i) => s.words.join(' ') + (i < packed.segs.length - 1 ? ' ' : ''))
+    .join('');
+  const chars = Array.from(fullText);
+  const charCount = chars.length;
+
+  const positions = [];
+  for (let s = 0; s < packed.segs.length; s++) {
+    const seg = packed.segs[s];
+    let text = seg.words.join(' ');
+    if (s < packed.segs.length - 1) text += ' ';
+    const cells = text.length;
+    const mid = (seg.x0 + seg.x1) / 2;
+    const startX = mid - (cells * packed.cw) / 2;
+    for (let c = 0; c < cells; c++) {
+      positions.push([startX + (c + 0.5) * packed.cw, seg.yc]);
+    }
+  }
+  const stepUnits = packed.cw;
+
+  // ----- screen metrics for the heart -----
+  const HEART_W = 32, HEART_H = 30, Y_TOP = 13;
+  let heartW, heartH, cx, cy, fs;
+  function computeHeartMetrics() {
+    heartH = Math.min(h * 0.88, w * 0.68);
+    heartW = heartH * (HEART_W / HEART_H);
+    cx = w / 2;
+    cy = h / 2 + 8;
+    fs = (heartW / HEART_W) * stepUnits * 1.22;
+  }
+  function toPx(x, y) {
+    return {
+      x: cx + (x / 16) * (heartW / 2),
+      y: cy + ((Y_TOP - y) / HEART_H) * heartH - heartH / 2
+    };
+  }
+
+  // ----- build letter spans -----
+  const heartEl = document.getElementById('lyrics');
+  const spans = [];
+  positions.forEach((pt, idx) => {
+    const span = document.createElement('span');
+    span.className = 'letter ghost';
+    span.textContent = chars[idx];
+    heartEl.appendChild(span);
+    spans.push(span);
+  });
+
+  function layoutLetters() {
+    computeHeartMetrics();
+    spans.forEach((span, idx) => {
+      const p = toPx(positions[idx][0], positions[idx][1]);
+      span.style.left = p.x + 'px';
+      span.style.top = p.y + 'px';
+      span.style.fontSize = fs + 'px';
+    });
+  }
+
+  // ----- reveal letters like typing, in sync with the song -----
+  let lastReveal = -1;
+
+  // Completion beat state (declared here so updateLetters can set it)
+  let completeAt = -1;          // audio time when the message finished
+  const PULSE_DUR = 2.6;        // seconds, one slow beat
+
+  // Steady typing pace: nothing before SONG_START, fully filled by SONG_END.
+  function revealedCount(t) {
+    const dur = Math.max(1, SONG_END - SONG_START);
+    const frac = (t - SONG_START) / dur;
+    const eased = Math.max(0, Math.min(1, frac));
+    return Math.round(eased * charCount);
+  }
+
+  const caretEl = document.getElementById('caret');
+
+  function updateLetters() {
+    const t = showTime() + 0.3;
+    const rev = revealedCount(t);
+
+    if (rev > lastReveal) {
+      lastReveal = rev;
+      const latestIdx = Math.min(rev - 1, spans.length - 1);
+      for (let i = 0; i < spans.length; i++) {
+        const shown = i < rev;
+        spans[i].classList.toggle('shown', shown);
+        spans[i].classList.toggle('ghost', !shown);
+        spans[i].classList.toggle('latest', shown && i === latestIdx);
+      }
+    }
+    const complete = rev >= charCount;
+    for (const s of spans) s.classList.toggle('complete', complete);
+
+    // Record the moment the last character lands, so the heart can give
+    // one slow pulse and the closing line can fade in.
+    if (complete && completeAt < 0) {
+      completeAt = showTime();
+      if (CLOSING_LINE) {
+        setTimeout(() => closingEl.classList.add('show'), 900);
+      }
+    }
+
+    // Caret: sits at the next character position while typing is in progress
+    if (rev > 0 && !complete && positions.length) {
+      const idx = Math.min(rev, positions.length - 1);
+      const p = toPx(positions[idx][0], positions[idx][1]);
+      caretEl.style.width = Math.max(2, fs * 0.10) + 'px';
+      caretEl.style.height = (fs * 1.05) + 'px';
+      caretEl.style.left = (p.x - fs * 0.30) + 'px';
+      caretEl.style.top = (p.y - fs * 0.52) + 'px';
+      caretEl.classList.add('on');
+    } else {
+      caretEl.classList.remove('on');
+    }
+  }
+
+  // ---------- Background: stars + floating hearts + beat pulse ----------
+  const COLORS = ['#ff4d8d', '#ff2d6f', '#ff6b9d', '#ff8ab0', '#e91e63'];
+  const hearts = [];
+
+  // Full-scale outline used to keep floating hearts off the lyrics.
+  const CB = [];
+  for (let i = 0; i < 240; i++) CB.push(heartPt((i / 240) * Math.PI * 2, 1.0));
+
+  function spansOnCB(yc) {
+    const xs = [];
+    for (let i = 0, j = CB.length - 1; i < CB.length; j = i++) {
+      const yi = CB[i][1], yj = CB[j][1];
+      if ((yi > yc) !== (yj > yc)) {
+        const xi = CB[i][0], xj = CB[j][0];
+        xs.push(xi + (xj - xi) * (yc - yi) / (yj - yi));
+      }
+    }
+    xs.sort((a, b) => a - b);
+    const out = [];
+    for (let k = 0; k + 1 < xs.length; k += 2) out.push([xs[k], xs[k + 1]]);
+    return out;
+  }
+
+  // Clearance against the real heart shape (not a bounding box), so hearts
+  // can sit above the lobes, in the top notch, and below the tip.
+  // 0 = over the heart (hidden), 1 = clear of it (fully visible).
+  const CLEAR_MARGIN = 1.4; // heart units
+  function clearanceAt(xPx, yPx) {
+    if (!heartW || !heartH) return 1;
+    const xu = (xPx - cx) * HEART_W / heartW;
+    const yu = Y_TOP - (yPx - cy + heartH / 2) * HEART_H / heartH;
+    const spans = spansOnCB(yu);
+    if (!spans.length) return 1; // above the lobes or below the tip
+    let best = Infinity;
+    for (const [a, b] of spans) {
+      if (xu >= a && xu <= b) return 0; // inside the shape
+      best = Math.min(best, xu < a ? a - xu : xu - b);
+    }
+    return Math.max(0, Math.min(1, best / CLEAR_MARGIN));
+  }
+
+  class Heart {
+    constructor() { this.reset(true); }
+    reset(anywhere) {
+      // Spawn anywhere across the width; clearanceAt() hides any that
+      // drift over the shape, so they fill the space around it - beneath
+      // the tip, above the lobes, in the top notch and the side corners.
+      this.x = Math.random() * w;
+      this.y = anywhere ? Math.random() * h : h + 60;
+      this.size = 8 + Math.random() * 24;
+      this.speed = 0.4 + Math.random() * 1.6;
+      this.color = COLORS[Math.floor(Math.random() * COLORS.length)];
+      this.baseOpacity = 0.5 + Math.random() * 0.5;
+      this.opacity = this.baseOpacity;
+      this.wobble = Math.random() * Math.PI * 2;
+      this.baseSize = this.size;
+    }
+    update(pulse) {
+      this.y -= this.speed;
+      this.wobble += 0.02;
+      this.x += Math.sin(this.wobble) * 0.5;
+      this.size = this.baseSize * (1 + pulse * 0.6);
+      // Fade out rather than drift across the lyrics
+      this.opacity = this.baseOpacity * clearanceAt(this.x, this.y);
+      if (this.y < -60) this.reset(false);
+    }
+    draw() {
+      if (this.opacity <= 0.01) return;
+      ctx.save();
+      ctx.globalAlpha = this.opacity;
+      ctx.fillStyle = this.color;
+      ctx.translate(this.x, this.y);
+      const s = this.size / 20;
+      ctx.scale(s, s);
+      ctx.beginPath();
+      ctx.moveTo(0, 5);
+      ctx.bezierCurveTo(-10, -10, -25, 5, 0, 20);
+      ctx.bezierCurveTo(25, 5, 10, -10, 0, 5);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  computeHeartMetrics();
+  for (let i = 0; i < 60; i++) hearts.push(new Heart());
+
+  const stars = [];
+  for (let i = 0; i < 340; i++) {
+    stars.push({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: 0.3 + Math.random() * 1.9,
+      tw: Math.random() * Math.PI * 2,
+      sp: 0.02 + Math.random() * 0.05,
+      bright: 0.45 + Math.random() * 0.55
+    });
+  }
+
+  // ---------- Moon (upper area, carries the message) ----------
+  const moon = { x: 0, y: 0, r: 0 };
+  function placeMoon() {
+    moon.r = Math.max(60, Math.min(w, h) * 0.125);
+    moon.x = w * 0.815;
+    moon.y = h * 0.205;
+    // nudge outward if it would sit over the heart
+    let guard = 0;
+    while (clearanceAt(moon.x, moon.y) < 1 && guard++ < 60) {
+      moon.x += (moon.x >= cx ? 1 : -1) * moon.r * 0.22;
+      moon.y -= moon.r * 0.12;
+    }
+    // keep it fully on screen
+    moon.x = Math.min(w - moon.r * 1.15, Math.max(moon.r * 1.15, moon.x));
+    moon.y = Math.min(h - moon.r * 1.15, Math.max(moon.r * 1.15, moon.y));
+  }
+
+  // Two cats sitting head to head on the moon.
+  // dir = +1 faces right, -1 faces left. r = head radius.
+  function drawCat(x, y, r, dir, ink) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(dir, 1);
+
+    ctx.fillStyle = ink;
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = Math.max(1, r * 0.10);
+    ctx.lineCap = 'round';
+
+    // ears
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.72, -r * 0.55);
+    ctx.lineTo(-r * 0.52, -r * 1.18);
+    ctx.lineTo(-r * 0.06, -r * 0.78);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(r * 0.72, -r * 0.55);
+    ctx.lineTo(r * 0.52, -r * 1.18);
+    ctx.lineTo(r * 0.06, -r * 0.78);
+    ctx.closePath();
+    ctx.fill();
+
+    // head
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // body
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.86, r * 0.62);
+    ctx.quadraticCurveTo(-r * 1.16, r * 2.30, 0, r * 2.34);
+    ctx.quadraticCurveTo(r * 1.16, r * 2.30, r * 0.86, r * 0.62);
+    ctx.closePath();
+    ctx.fill();
+
+    // tail, curling out behind
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.92, r * 2.10);
+    ctx.quadraticCurveTo(-r * 2.10, r * 2.05, -r * 1.86, r * 0.70);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawCatsOnMoon() {
+    const r = moon.r * 0.215;              // head radius
+    const gap = r * 0.98;                  // horizontal offset from centre
+    const y = moon.y + moon.r * 0.10;      // sit slightly below centre
+    const ink = 'rgba(74, 58, 30, 0.92)';
+    // left cat faces right, right cat faces left - heads together
+    drawCat(moon.x - gap, y, r, 1, ink);
+    drawCat(moon.x + gap, y, r, -1, ink);
+
+    // tiny heart floating above where they meet
+    ctx.save();
+    ctx.fillStyle = 'rgba(214, 92, 122, 0.85)';
+    const hs = r * 0.42;
+    const hx = moon.x, hy = y - r * 1.92;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy + hs * 0.75);
+    ctx.bezierCurveTo(hx - hs * 1.30, hy - hs * 0.30, hx - hs * 0.42, hy - hs * 1.18, hx, hy - hs * 0.42);
+    ctx.bezierCurveTo(hx + hs * 0.42, hy - hs * 1.18, hx + hs * 1.30, hy - hs * 0.30, hx, hy + hs * 0.75);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawMoon() {
+    const a = clearanceAt(moon.x, moon.y);
+    if (a <= 0.01) return;
+    ctx.save();
+    ctx.globalAlpha = a;
+
+    // outer glow
+    const g = ctx.createRadialGradient(moon.x, moon.y, moon.r * 0.5, moon.x, moon.y, moon.r * 2.7);
+    g.addColorStop(0, 'rgba(255, 240, 214, 0.32)');
+    g.addColorStop(1, 'rgba(255, 240, 214, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(moon.x, moon.y, moon.r * 2.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // body
+    const body = ctx.createRadialGradient(
+      moon.x - moon.r * 0.3, moon.y - moon.r * 0.3, moon.r * 0.2,
+      moon.x, moon.y, moon.r
+    );
+    body.addColorStop(0, '#fffdf4');
+    body.addColorStop(1, '#f2e4c0');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.arc(moon.x, moon.y, moon.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // craters (kept near the rim so they stay clear of the cats)
+    ctx.fillStyle = 'rgba(206, 190, 152, 0.30)';
+    const cr = [[-0.60, -0.44, 0.15], [0.58, 0.40, 0.12], [-0.52, 0.55, 0.09], [0.62, -0.38, 0.10]];
+    for (const [dx, dy, rr] of cr) {
+      ctx.beginPath();
+      ctx.arc(moon.x + dx * moon.r, moon.y + dy * moon.r, rr * moon.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // two cats sitting head to head
+    drawCatsOnMoon();
+
+    ctx.restore();
+  }
+
+  // ---------- Fireworks (background, faded off the lyrics) ----------
+  const FW_COLORS = ['#ff5d8f', '#ffd36e', '#8fe3ff', '#c79bff', '#8dffb0', '#ff9f6e'];
+  const fwParticles = [];
+  let fwTimer = 40;
+
+  function launchFirework() {
+    // pick a spot clear of the lyrics, preferring the upper half
+    let fx = 0, fy = 0, ok = false;
+    for (let tries = 0; tries < 40; tries++) {
+      const px = w * (0.05 + Math.random() * 0.90);
+      const py = h * (0.06 + Math.random() * 0.44);
+      if (clearanceAt(px, py) >= 1) { fx = px; fy = py; ok = true; break; }
+    }
+    if (!ok) return;
+    const color = FW_COLORS[Math.floor(Math.random() * FW_COLORS.length)];
+    const count = 26 + Math.floor(Math.random() * 22);
+    const power = 1.7 + Math.random() * 2.3;
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2 + Math.random() * 0.16;
+      const spd = power * (0.55 + Math.random() * 0.75);
+      fwParticles.push({
+        x: fx, y: fy,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        life: 1, decay: 0.008 + Math.random() * 0.014,
+        color, size: 1.1 + Math.random() * 1.9
+      });
+    }
+  }
+
+  function updateFireworks(pulse) {
+    fwTimer -= 1 + pulse * 3; // launch more often on strong beats
+    if (fwTimer <= 0) {
+      launchFirework();
+      fwTimer = 55 + Math.random() * 90;
+    }
+    for (let i = fwParticles.length - 1; i >= 0; i--) {
+      const p = fwParticles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.022;      // gravity
+      p.vx *= 0.985;      // drag
+      p.vy *= 0.985;
+      p.life -= p.decay;
+      if (p.life <= 0) fwParticles.splice(i, 1);
+    }
+  }
+
+  function drawFireworks() {
+    ctx.save();
+    for (const p of fwParticles) {
+      const a = p.life * clearanceAt(p.x, p.y);
+      if (a <= 0.01) continue;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function getPulse() {
+    if (!analyser) return 0;
+    analyser.getByteFrequencyData(freqData);
+    let sum = 0;
+    const low = freqData.slice(0, 16);
+    for (let i = 0; i < low.length; i++) sum += low[i];
+    const avg = sum / low.length / 255;
+    return Math.min(1, avg * 1.8);
+  }
+
+  // Filled heart backdrop + outline.
+  // The message text is black, so the shape is filled with a soft light
+  // colour to keep it readable against the dark background.
+  function heartPath(F) {
+    ctx.beginPath();
+    const G = 400;
+    for (let i = 0; i <= G; i++) {
+      const hp = heartPt((i / G) * Math.PI * 2, F);
+      const p = toPx(hp[0], hp[1]);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+  }
+
+  // ---- intro fade-in + one slow pulse when the last character lands ----
+
+  // 0 before the song, ramps to 1 across the intro so the heart eases in
+  function introAlpha(t) {
+    const from = Math.max(0, SONG_START - 9);
+    if (t <= from) return 0;
+    if (t >= SONG_START) return 1;
+    return (t - from) / (SONG_START - from);
+  }
+
+  // Extra scale applied to the whole heart for the completion beat
+  function completionScale(t) {
+    if (completeAt < 0) return 0;
+    const e = t - completeAt;
+    if (e < 0 || e > PULSE_DUR) return 0;
+    // ease out and back: 0 -> 1 -> 0
+    return Math.sin((e / PULSE_DUR) * Math.PI);
+  }
+
+  function drawGuide() {
+    computeHeartMetrics();
+    const pulse = getPulse();
+    const t = showTime();
+
+    const intro = introAlpha(t);
+    if (intro <= 0.001) return;          // hidden before the intro begins
+
+    const beat = completionScale(t);      // 0..1..0 over PULSE_DUR
+    const grow = 1 + beat * 0.085;        // clearly visible swell
+
+    ctx.save();
+    ctx.globalAlpha = intro;
+
+    // scale the heart about its own centre for the completion beat
+    const cH = toPx(0, -6);
+    if (beat > 0) {
+      ctx.translate(cH.x, cH.y);
+      ctx.scale(grow, grow);
+      ctx.translate(-cH.x, -cH.y);
+    }
+
+    // soft glow around the heart, breathing with the beat
+    const c = toPx(0, -6);
+    const glowR = heartH * (0.72 + pulse * 0.10 + beat * 0.16);
+    const g = ctx.createRadialGradient(c.x, c.y, heartH * 0.12, c.x, c.y, glowR);
+    g.addColorStop(0, 'rgba(255, 150, 190, ' + (0.30 + beat * 0.34) + ')');
+    g.addColorStop(1, 'rgba(255, 120, 170, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, glowR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // filled heart body (light, so black text reads on it)
+    const top = toPx(0, 13), bot = toPx(0, -17);
+    const body = ctx.createLinearGradient(0, top.y, 0, bot.y);
+    body.addColorStop(0, '#ffe9f2');
+    body.addColorStop(0.55, '#ffc9dd');
+    body.addColorStop(1, '#ff9dc0');
+    heartPath(1.0);
+    ctx.fillStyle = body;
+    ctx.fill();
+
+    // rim - brightens and thickens on the beat
+    heartPath(1.0);
+    ctx.strokeStyle = 'rgba(255, 255, 255, ' + (0.75 + beat * 0.25) + ')';
+    ctx.lineWidth = 2.5 + beat * 4.5;
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Match the text to the heart's swell so they move together
+    if (typeof heartEl !== 'undefined' && heartEl) {
+      heartEl.style.opacity = intro;
+      heartEl.style.transformOrigin = cH.x + 'px ' + cH.y + 'px';
+      heartEl.style.transform = beat > 0 ? 'scale(' + grow + ')' : 'none';
+    }
+  }
+
+  function loop() {
+    ctx.clearRect(0, 0, w, h);
+
+    const pulse = getPulse();
+
+    // Moon (behind everything)
+    drawMoon();
+
+    // Stars
+    ctx.fillStyle = '#fff';
+    for (const s of stars) {
+      s.tw += s.sp;
+      ctx.globalAlpha = s.bright * (0.30 + 0.70 * Math.abs(Math.sin(s.tw)));
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Fireworks
+    updateFireworks(pulse);
+    drawFireworks();
+
+    // Floating hearts
+    for (const heart of hearts) {
+      heart.update(pulse);
+      heart.draw();
+    }
+
+    drawGuide();
+    updateLetters();
+
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  placeMoon();
+  loop();
+</script>
+</body>
+</html>
