@@ -657,16 +657,14 @@
     drawCat(moon.x - gap, y, r, 1, ink);
     drawCat(moon.x + gap, y, r, -1, ink);
 
-    // tiny heart floating above where they meet
+    // "us" written above the cats' heads
     ctx.save();
-    ctx.fillStyle = 'rgba(214, 92, 122, 0.85)';
-    const hs = r * 0.42;
-    const hx = moon.x, hy = y - r * 1.92;
-    ctx.beginPath();
-    ctx.moveTo(hx, hy + hs * 0.75);
-    ctx.bezierCurveTo(hx - hs * 1.30, hy - hs * 0.30, hx - hs * 0.42, hy - hs * 1.18, hx, hy - hs * 0.42);
-    ctx.bezierCurveTo(hx + hs * 0.42, hy - hs * 1.18, hx + hs * 1.30, hy - hs * 0.30, hx, hy + hs * 0.75);
-    ctx.fill();
+    ctx.fillStyle = 'rgba(214, 92, 122, 0.92)';
+    const fs = moon.r * 0.22;
+    ctx.font = 'bold ' + fs + "px 'Segoe UI', Tahoma, sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('us', moon.x, y - r * 2.35);
     ctx.restore();
   }
 
