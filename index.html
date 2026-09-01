@@ -188,7 +188,9 @@
   audio.preload = 'auto';
   audio.muted = false;
   audio.playsInline = true;
-  audio.style.display = 'none';
+  // DON'T use display:none â€” some browsers block audio from hidden media.
+  // Instead, move it off-screen so it's invisible but still plays.
+  audio.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
   document.body.appendChild(audio);
   const openingEl = document.getElementById('opening');
   const closingEl = document.getElementById('closing');
