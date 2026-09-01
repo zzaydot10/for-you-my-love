@@ -182,8 +182,7 @@
   const AUDIO_SRC = "nights_like_this.mp3";
 
   // ---------- Audio setup ----------
-  // Use a hidden <video> element instead of Audio() so MP4 files play
-  // reliably across all browsers (audio elements reject MP4 containers).
+  // Use a hidden <video> element so MP4 files play in all browsers.
   const audio = document.createElement('video');
   audio.src = AUDIO_SRC;
   audio.preload = 'auto';
@@ -191,14 +190,12 @@
   audio.playsInline = true;
   audio.style.display = 'none';
   document.body.appendChild(audio);
-  let audioCtx, analyser, freqData;
   const openingEl = document.getElementById('opening');
   const closingEl = document.getElementById('closing');
   if (CLOSING_LINE) closingEl.textContent = CLOSING_LINE;
 
   let audioOk = false;
   let fallbackStart = null;
-  let pendingPlay = false;    // true while waiting for the video to buffer
 
   function showTime() {
     if (audioOk && !audio.paused) return audio.currentTime;
@@ -207,57 +204,18 @@
     return (performance.now() - fallbackStart) / 1000;
   }
 
-  function initAudio() {
-    if (audioCtx) return;
-    try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const src = audioCtx.createMediaElementSource(audio);
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      src.connect(analyser);
-      analyser.connect(audioCtx.destination);
-      freqData = new Uint8Array(analyser.frequencyBinCount);
-    } catch (e) {
-      console.warn("Audio analysis unavailable:", e);
-      audioCtx = null;
-      analyser = null;
-    }
-  }
-
-  async function tryPlay() {
-    if (audioCtx && audioCtx.state === 'suspended') {
-      try { await audioCtx.resume(); } catch (e) { /* ignore */ }
-    }
+  async function startPlayback() {
+    if (fallbackStart === null) fallbackStart = performance.now();
     try {
       await audio.play();
       audioOk = true;
-      pendingPlay = false;
-      return true;
     } catch (err) {
-      console.warn('Play failed:', err && err.message);
-      return false;
+      console.warn('Audio failed:', err && err.message);
+      audioOk = false;
     }
   }
 
-  async function startPlayback() {
-    if (fallbackStart === null) fallbackStart = performance.now();
-    if (audioCtx === undefined) initAudio();
-
-    // If the video hasn't buffered enough yet, wait for it
-    if (audio.readyState < 3) {   // HAVE_FUTURE_DATA = 3
-      pendingPlay = true;
-      audio.addEventListener('canplay', function onCanPlay() {
-        audio.removeEventListener('canplay', onCanPlay);
-        if (pendingPlay) tryPlay();
-      }, { once: true });
-      // Also try after a short timeout as a safety net
-      setTimeout(() => { if (pendingPlay) tryPlay(); }, 2000);
-    } else {
-      await tryPlay();
-    }
-  }
-
-  // Opening screen: one tap starts everything
+  // One tap starts everything
   openingEl.addEventListener('click', () => {
     openingEl.classList.add('gone');
     setTimeout(() => { openingEl.style.display = 'none'; }, 1200);
